@@ -2,5 +2,9 @@
   "appId": "com.socialnet.app",
   "appName": "SocialNet",
   "webDir": "www",
-  "bundledWebRuntime": false
+  "bundledWebRuntime": false,
+  "server": {
+    "androidScheme": "https",
+    "cleartext": true
+  }
 }
