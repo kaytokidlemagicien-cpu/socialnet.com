@@ -1,0 +1,380 @@
+<!doctype html>
+<html lang="fr" dir="ltr">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+
+    <title>Accueil - SocialNet</title>
+
+    <link rel="stylesheet" href="/style.css">
+</head>
+
+<body>
+
+<header class="topbar">
+
+    <a class="brand" href="/index.html">
+        <span class="brand-icon">SN</span>
+        <span>SocialNet</span>
+    </a>
+
+    <div class="header-actions">
+
+        <a href="/profile.html" class="current-user">
+            <img
+                id="topAvatar"
+                class="mini-avatar"
+                src=""
+                alt="Photo de profil"
+                hidden
+            >
+
+            <span
+                id="topAvatarFallback"
+                class="mini-avatar"
+            >👤</span>
+
+            <span id="topName">...</span>
+        </a>
+
+        <button
+            id="logoutButton"
+            class="logout-button"
+            type="button"
+        >
+            Déconnexion
+        </button>
+
+    </div>
+
+</header>
+
+
+<main class="page">
+
+    <div class="grid">
+
+        <!-- barre latérale -->
+
+        <aside class="side">
+
+            <div class="side-card">
+
+                <div class="profile-mini">
+
+                    <a
+                        href="/profile.html"
+                        class="profile-mini-row"
+                    >
+
+                        <img
+                            id="sideAvatar"
+                            class="avatar"
+                            src=""
+                            alt="Photo de profil"
+                            hidden
+                        >
+
+                        <span
+                            id="sideAvatarFallback"
+                            class="avatar"
+                        >👤</span>
+
+                        <div>
+
+                            <strong id="sideName">
+                                ...
+                            </strong>
+
+                            <small>
+                                Votre compte SocialNet
+                            </small>
+
+                        </div>
+
+                    </a>
+
+                </div>
+
+
+                <nav class="nav">
+
+                    <a
+                        class="active"
+                        href="/index.html"
+                    >
+                        🏠 Accueil
+                    </a>
+
+                    <a
+                        href="/profile.html"
+                    >
+                        👤 Mon profil
+                    </a>
+
+                    <a
+                        href="/friends.html"
+                    >
+                        🤝 Amis
+                    </a>
+
+                    <a
+                        href="/messages.html"
+                    >
+                        💬 Messages
+                    </a>
+
+                </nav>
+
+            </div>
+
+        </aside>
+
+
+        <!-- contenu principal -->
+
+        <section>
+
+            <div class="feed-title">
+
+                <h1>
+                    Accueil
+                </h1>
+
+                <button
+                    id="refresh"
+                    class="btn btn-soft btn-small"
+                    type="button"
+                >
+                    ↻ Actualiser
+                </button>
+
+            </div>
+
+
+            <!-- Créer une publication -->
+
+            <div class="card composer">
+
+                <div class="composer-top">
+
+                    <img
+                        id="composerAvatar"
+                        class="avatar"
+                        src=""
+                        alt="Photo de profil"
+                        hidden
+                    >
+
+                    <span
+                        id="composerAvatarFallback"
+                        class="avatar"
+                    >👤</span>
+
+                    <div>
+
+                        <strong id="composerName">
+                            ...
+                        </strong>
+
+                        <small>
+                            Partagez quelque chose avec votre communauté
+                        </small>
+
+                    </div>
+
+                </div>
+
+
+                <textarea
+                    id="postBody"
+                    maxlength="5000"
+                    placeholder="À quoi pensez-vous ?"
+                ></textarea>
+
+
+                <!-- Choisir une image depuis l’appareil -->
+
+                <input
+                    id="postImageFile"
+                    type="file"
+                    accept="image/jpeg,image/png,image/gif,image/webp"
+                    hidden
+                >
+
+
+                <div class="composer-bottom">
+
+                    <div class="composer-tools">
+
+                        <button
+                            id="choosePostImage"
+                            class="btn btn-soft"
+                            type="button"
+                        >
+                            📷 Ajouter une image
+                        </button>
+
+                        <span
+                            id="selectedImageName"
+                            class="attach-hint"
+                        >
+                            Aucune image sélectionnée
+                        </span>
+
+                    </div>
+
+                    <button
+                        id="publish"
+                        class="btn btn-primary"
+                        type="button"
+                    >
+                        Publier
+                    </button>
+
+                </div>
+
+
+                <!-- Aperçu de l’image -->
+
+                <div
+                    id="postImagePreviewBox"
+                    class="image-preview-box"
+                    hidden
+                >
+
+                    <div class="image-preview-header">
+
+                        <strong>
+                            Aperçu de l’image
+                        </strong>
+
+                        <button
+                            id="removePostImage"
+                            type="button"
+                            class="preview-remove"
+                        >
+                            ✕
+                        </button>
+
+                    </div>
+
+                    <img
+                        id="postImagePreview"
+                        class="post-image-preview"
+                        src=""
+                        alt="Aperçu de l’image"
+                    >
+
+                </div>
+
+
+                <div
+                    id="uploadStatus"
+                    class="upload-status"
+                ></div>
+
+            </div>
+
+
+            <!-- publications -->
+
+            <div class="feed-title">
+
+                <h1>
+                    Dernières publications
+                </h1>
+
+            </div>
+
+
+            <div id="feed">
+
+                <div class="card loading">
+                    Chargement des publications...
+                </div>
+
+            </div>
+
+
+            <!-- إدارة publications -->
+
+            <div class="card danger-zone">
+
+                <h3>
+                    Gérer mes publications
+                </h3>
+
+                <p>
+                    Supprimer définitivement toutes vos publications de la base de données.
+                </p>
+
+                <button
+                    id="clearMine"
+                    class="btn btn-danger"
+                    type="button"
+                >
+                    Supprimer toutes mes publications
+                </button>
+
+            </div>
+
+        </section>
+
+
+        <!-- colonne droite -->
+
+        <aside class="side right-side">
+
+            <div class="card right-widget">
+
+                <h3 class="widget-title">
+                    ✨ SocialNet
+                </h3>
+
+                <p class="muted">
+                    Un espace simple pour partager vos idées et communiquer avec les autres.
+                </p>
+
+            </div>
+
+
+            <div class="card right-widget">
+
+                <h3 class="widget-title">
+                    📷 Photos
+                </h3>
+
+                <p class="muted">
+                    Vous pouvez maintenant choisir des images directement depuis votre téléphone ou votre ordinateur et les publier sur votre compte.
+                </p>
+
+            </div>
+
+
+            <div class="card right-widget">
+
+                <h3 class="widget-title">
+                    🔒 Confidentialité
+                </h3>
+
+                <p class="muted">
+                    La session de connexion est conservée uniquement pour cet onglet.
+                </p>
+
+            </div>
+
+        </aside>
+
+    </div>
+
+</main>
+
+
+<script src="/native-config.js"></script><script src="/app.js"></script>
+<script src="/common.js"></script>
+<script src="/index.js"></script>
+
+</body>
+</html>
