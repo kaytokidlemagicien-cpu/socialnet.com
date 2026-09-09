@@ -34,18 +34,17 @@ jobs:
             npx --yes @capacitor/cli add android
           fi
 
-      - name: Configure Android Permissions & Gradle Properties
+      - name: Configure Android Permissions & Fix Duplicate Classes
         run: |
           MANIFEST_PATH="android/app/src/main/AndroidManifest.xml"
           if [ -f "$MANIFEST_PATH" ]; then
             sed -i 's/<application/<application android:usesCleartextTraffic="true"/g' "$MANIFEST_PATH"
           fi
           
-          # إضافة إعدادات لمنع تضارب مكتبات Kotlin و Java
-          GRADLE_PROPS="android/gradle.properties"
-          if [ -f "$GRADLE_PROPS" ]; then
-            echo "android.useAndroidX=true" >> "$GRADLE_PROPS"
-            echo "android.enableJetifier=true" >> "$GRADLE_PROPS"
+          # استبعاد مكتبات Kotlin المكررة من build.gradle
+          BUILD_GRADLE="android/app/build.gradle"
+          if [ -f "$BUILD_GRADLE" ]; then
+            echo 'configurations.all { resolutionStrategy { exclude group: "org.jetbrains.kotlin", module: "kotlin-stdlib-jdk7"; exclude group: "org.jetbrains.kotlin", module: "kotlin-stdlib-jdk8" } }' >> "$BUILD_GRADLE"
           fi
 
       - name: Sync Capacitor
@@ -62,7 +61,7 @@ jobs:
         run: |
           cd android
           chmod +x gradlew
-          ./gradlew assembleDebug -Pandroid.kotlin.suppressKotlinVersionCompatibilityCheck=true
+          ./gradlew assembleDebug
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
