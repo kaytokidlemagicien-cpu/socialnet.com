@@ -1,18 +1,12 @@
-// تحديد رابط السيرفر المباشر على الإنترنت بدلاً من localhost
-const LIVE_SERVER_URL = "https://your-backend-domain.com"; // ضع رابط سيرفرك هنا
-
-// الدالة الموحدة للحصول على رابط API
-function getApiUrl() {
-  // إذا كان التطبيق يعمل داخل Capacitor (APK أندرويد)
-  if (window.Capacitor && window.Capacitor.isNativePlatform()) {
-    return LIVE_SERVER_URL;
-  }
-  // إذا كان يختبر محلياً في المحاكي
-  if (window.location.protocol === 'file:') {
-    return LIVE_SERVER_URL;
-  }
-  // إذا كان يعمل على المتصفح العادي
-  return window.location.origin;
-}
-
-const API_BASE_URL = getApiUrl();
+"use strict";
+if(SocialNet.requireLogin()){
+(async()=>{try{
+ const d=await SocialNet.me(),u=d.user;
+ sessionStorage.setItem("sn_user",JSON.stringify(u));
+ for(const id of ["topName","sideName"]){const el=document.getElementById(id);if(el)el.textContent=u.name;}
+ for(const id of ["topAvatar","sideAvatar"]){
+   const el=document.getElementById(id);
+   if(el) el.outerHTML=SocialNet.avatarHTML(u.avatar_url,u.name).replace('class="avatar"','class="mini-avatar"');
+ }
+}catch(e){console.error(e)}})()}
+const lb=document.getElementById("logoutButton");if(lb)lb.addEventListener("click",()=>SocialNet.logout());
