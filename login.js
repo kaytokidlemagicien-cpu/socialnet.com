@@ -5,7 +5,7 @@ const f = document.getElementById("loginForm"),
       b = document.getElementById("loginButton"),
       e = document.getElementById("loginError");
 
-// التبديل إلى localStorage لضمان بقاء الجلسة مفتوحة في التطبيق والموقع
+// التحقق المباشر عند فتح التطبيق
 (async () => {
   const t = localStorage.getItem("sn_token");
   if (!t) return;
@@ -23,29 +23,30 @@ f.addEventListener("submit", async ev => {
   ev.preventDefault();
   e.textContent = "";
   const name = n.value.trim(), password = p.value;
-  
+
   if (!name || !password) {
     e.textContent = "Entrez votre nom et votre mot de passe.";
     return;
   }
-  
+
   b.disabled = true;
   b.textContent = "Connexion...";
-  
+
   try {
     const r = await fetch("/api/enter", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name, password })
     });
+
     const d = await r.json().catch(() => ({}));
-    
-    if (!r.ok) throw new Error(d.error || "Échec de la connexion.");
-    
-    // حفظ التوكن والبيانات بشكل دائم
+
+    if (!r.ok) throw new Error(d.error || "Mot de passe incorrect.");
+
+    // حفظ التوكن وبيانات المستخدم في localStorage لتبقى متصلة دائماً
     localStorage.setItem("sn_token", d.token);
     localStorage.setItem("sn_user", JSON.stringify(d.user));
-    
+
     location.replace("/index.html");
   } catch (x) {
     e.textContent = x.message;
