@@ -438,8 +438,6 @@ async function initDb() {
 
                 avatar_url TEXT,
 
-                phone_number TEXT,
-
                 created_at TIMESTAMPTZ
                     NOT NULL DEFAULT NOW()
 
@@ -456,30 +454,9 @@ async function initDb() {
             ADD COLUMN IF NOT EXISTS avatar_url TEXT;
 
             ALTER TABLE users
-            ADD COLUMN IF NOT EXISTS phone_number TEXT;
-
-            ALTER TABLE users
             ADD COLUMN IF NOT EXISTS is_banned BOOLEAN NOT NULL DEFAULT FALSE;
         `);
 
-
-        await pool.query(`
-            CREATE UNIQUE INDEX IF NOT EXISTS users_phone_unique
-            ON users (phone_number)
-            WHERE phone_number IS NOT NULL AND phone_number <> '';
-        `);
-
-        /* =================================================
-           SMS imports
-        ================================================= */
-        await pool.query(`
-            CREATE TABLE IF NOT EXISTS sms_imports (
-                client_id TEXT PRIMARY KEY,
-                sender_phone TEXT,
-                body TEXT NOT NULL,
-                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-            );
-        `);
 
         /* =================================================
            POSTS
@@ -1102,22 +1079,6 @@ app.delete("/api/admin/groups/:groupId", requireAuth, requireAdmin, async (req, 
     } catch (err) { next(err); }
 });
 
-app.get("/api/health", (req, res) => res.json({ ok: true, service: "SecretNet" }));
-
-// Android يرسل رقم الخط تلقائياً عند توفره؛ المستخدم لا يكتبه في SecretNet.
-app.post("/api/device/phone", requireAuth, async (req, res, next) => {
-    try {
-        const phone = String(req.body?.phone_number || "").trim().replace(/[^0-9+]/g, "");
-        if (!phone || phone.length < 6 || phone.length > 20) {
-            return res.status(400).json({ error: "Numéro indisponible sur cet appareil." });
-        }
-        const clash = await pool.query("SELECT id FROM users WHERE phone_number=$1 AND id<>$2 LIMIT 1", [phone, req.user.id]);
-        if (clash.rows.length) return res.status(409).json({ error: "Ce numéro est déjà lié à un autre compte SecretNet." });
-        const r = await pool.query("UPDATE users SET phone_number=$1 WHERE id=$2 RETURNING id,name,avatar_url,phone_number,created_at", [phone, req.user.id]);
-        res.json({ ok: true, user: r.rows[0] });
-    } catch (err) { next(err); }
-});
-
 /* =========================================================
    الصفحة Accueil
 ========================================================= */
@@ -1220,7 +1181,6 @@ app.post(
                         id,
                         name,
                         avatar_url,
-                        phone_number,
                         created_at
                     `,
                     [name]
@@ -1313,7 +1273,6 @@ app.get(
                         id,
                         name,
                         avatar_url,
-                        phone_number,
                         created_at
 
                     FROM users
@@ -1657,7 +1616,6 @@ app.get(
                         id,
                         name,
                         avatar_url,
-                        phone_number,
                         created_at
 
                     FROM users
@@ -2986,24 +2944,6 @@ app.post(
 
 
 
-app.post("/api/messages/import-sms", writeLimiter, requireAuth, async (req, res, next) => {
-    try {
-        const senderPhone = String(req.body?.sender_phone || "").trim().replace(/[^0-9+]/g, "");
-        const body = String(req.body?.body || "").trim();
-        const clientId = String(req.body?.client_id || "").trim();
-        if (!senderPhone || !body || !clientId) return res.status(400).json({ error: "SMS SecretNet invalide." });
-        const existing = await pool.query("SELECT 1 FROM sms_imports WHERE client_id=$1", [clientId]);
-        if (existing.rows.length) return res.json({ ok: true, duplicate: true });
-        const sender = await pool.query("SELECT id FROM users WHERE phone_number=$1 LIMIT 1", [senderPhone]);
-        if (!sender.rows.length) return res.status(404).json({ error: "Expéditeur SecretNet inconnu." });
-        const senderId = Number(sender.rows[0].id);
-        if (!(await areFriends(req.user.id, senderId))) return res.status(403).json({ error: "Expéditeur non autorisé." });
-        const msg = await pool.query(`INSERT INTO messages(sender_id,receiver_id,body) VALUES($1,$2,$3) RETURNING id,sender_id,receiver_id,body,created_at`, [senderId, req.user.id, body]);
-        await pool.query(`INSERT INTO sms_imports(client_id,sender_phone,body) VALUES($1,$2,$3) ON CONFLICT (client_id) DO NOTHING`, [clientId, senderPhone, body]);
-        res.json({ ok: true, message: msg.rows[0] });
-    } catch (err) { next(err); }
-});
-
 /* =========================================================
    نظام Amis
 ========================================================= */
@@ -3011,7 +2951,7 @@ app.post("/api/messages/import-sms", writeLimiter, requireAuth, async (req, res,
 app.get("/api/friends", requireAuth, async (req, res, next) => {
     try {
         const result = await pool.query(`
-            SELECT u.id, u.name, u.avatar_url, u.phone_number, u.created_at
+            SELECT u.id, u.name, u.avatar_url, u.created_at
             FROM users u
             JOIN friendships f ON (
                 (f.requester_id = $1 AND f.addressee_id = u.id) OR
