@@ -1041,6 +1041,73 @@ app.post("/api/admin/users/:userId/unban", requireAuth, requireAdmin, async (req
     } catch (err) { next(err); }
 });
 
+app.post("/api/admin/users/:userId/unban", requireAuth, requireAdmin, async (req, res, next) => {
+    try {
+        const id = Number(req.params.userId);
+        const r = await pool.query("UPDATE users SET is_banned=FALSE WHERE id=$1 RETURNING id,name,is_banned", [id]);
+        if (!r.rows.length) return res.status(404).json({ error: "Utilisateur introuvable." });
+        res.json({ ok: true, user: r.rows[0] });
+    } catch (err) { next(err); }
+});
+
+// ==========================================
+// ضع كود تسجيل الدخول الجديد هنا مباشرة:
+// ==========================================
+app.post("/api/enter", writeLimiter, async (req, res) => {
+  const { name, password } = req.body;
+
+  // 1. التحقق من كلمة السر الموحدة Boss2026
+  if (password !== SITE_PASSWORD) {
+    return res.status(401).json({ error: "Mot de passe incorrect." });
+  }
+
+  if (!name || !name.trim()) {
+    return res.status(400).json({ error: "Veuillez entrer un nom." });
+  }
+
+  const cleanName = name.trim();
+
+  try {
+    // 2. البحث عن المستخدم أو إنشاؤه في PostgreSQL
+    let result = await pool.query(
+      "SELECT id, name, avatar_url FROM users WHERE LOWER(name) = LOWER($1) LIMIT 1",
+      [cleanName]
+    );
+    let user = result.rows[0];
+
+    if (!user) {
+      const insertResult = await pool.query(
+        "INSERT INTO users (name) VALUES ($1) RETURNING id, name, avatar_url",
+        [cleanName]
+      );
+      user = insertResult.rows[0];
+    }
+
+    // 3. إنشاء الجلسة وتخزين التوكن
+    const rawToken = createToken();
+    const tokenHash = hashToken(rawToken);
+    const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30 يومًا
+
+    await pool.query(
+      "INSERT INTO sessions (token_hash, user_id, expires_at) VALUES ($1, $2, $3)",
+      [tokenHash, user.id, expiresAt]
+    );
+
+    // 4. إرجاع التوكن وبيانات المستخدم الكاملة
+    res.json({
+      token: rawToken,
+      user: {
+        id: user.id,
+        name: user.name,
+        avatar_url: user.avatar_url || ""
+      }
+    });
+  } catch (err) {
+    console.error("Erreur connexion:", err);
+    res.status(500).json({ error: "Erreur serveur lors de la connexion." });
+  }
+});
+
 app.delete("/api/admin/users/:userId", requireAuth, requireAdmin, async (req, res, next) => {
     try {
         const id = Number(req.params.userId);
