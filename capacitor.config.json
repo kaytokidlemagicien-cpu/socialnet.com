@@ -1,6 +1,6 @@
 {
-  "appId": "com.secretnet.app",
-  "appName": "SecretNet",
+  "appId": "com.socialnet.app",
+  "appName": "SocialNet",
   "webDir": "www",
   "bundledWebRuntime": false
 }
