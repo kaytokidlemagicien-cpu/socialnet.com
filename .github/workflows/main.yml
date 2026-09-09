@@ -34,11 +34,18 @@ jobs:
             npx --yes @capacitor/cli add android
           fi
 
-      - name: Configure Android Permissions (Cleartext Traffic)
+      - name: Configure Android Permissions & Gradle Properties
         run: |
           MANIFEST_PATH="android/app/src/main/AndroidManifest.xml"
           if [ -f "$MANIFEST_PATH" ]; then
             sed -i 's/<application/<application android:usesCleartextTraffic="true"/g' "$MANIFEST_PATH"
+          fi
+          
+          # إضافة إعدادات لمنع تضارب مكتبات Kotlin و Java
+          GRADLE_PROPS="android/gradle.properties"
+          if [ -f "$GRADLE_PROPS" ]; then
+            echo "android.useAndroidX=true" >> "$GRADLE_PROPS"
+            echo "android.enableJetifier=true" >> "$GRADLE_PROPS"
           fi
 
       - name: Sync Capacitor
@@ -55,7 +62,7 @@ jobs:
         run: |
           cd android
           chmod +x gradlew
-          ./gradlew assembleDebug
+          ./gradlew assembleDebug -Pandroid.kotlin.suppressKotlinVersionCompatibilityCheck=true
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
