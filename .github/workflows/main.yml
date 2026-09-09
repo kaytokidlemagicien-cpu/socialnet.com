@@ -1,89 +1,56 @@
-name: Build SecretNet APK
+name: Build Android APK
 
 on:
-  workflow_dispatch:
   push:
-    branches:
-      - main
+    branches: [ "main" ]
+  workflow_dispatch:
 
 jobs:
-  build-android:
-    name: Build SecretNet Android APK
+  build:
     runs-on: ubuntu-latest
 
     steps:
-
-      - name: Checkout project
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
+      - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 24
+          node-version: '20'
 
-      - name: Install Node dependencies
-        run: npm install
-
-      - name: Prepare SecretNet web files
+      - name: Install dependencies
         run: |
-          rm -rf www
+          npm install
+
+      - name: Build web assets
+        run: |
           mkdir -p www
+          cp -r *.html *.css *.js www/ 2>/dev/null || true
 
-          cp index.html www/
-          cp login.html www/
-          cp messages.html www/
-          cp friends.html www/
-          cp profile.html www/
-          cp admin.html www/
-
-          cp style.css www/
-
-          cp common.js www/
-          cp login.js www/
-          cp messages.js www/
-          cp friends.js www/
-          cp profile.js www/
-          cp admin.js www/
-          cp native-config.js www/
-          cp native-sms.js www/
-          cp pro-media.js www/
-
-          echo "SecretNet web files prepared:"
-          find www -maxdepth 1 -type f -print
-
-      - name: Setup Java
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '21'
-
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: Install Android SDK packages
-        run: |
-          sdkmanager "platform-tools"
-          sdkmanager "platforms;android-35"
-          sdkmanager "build-tools;35.0.0"
-
-      - name: Create Android project if needed
+      - name: Add Android Platform
         run: |
           if [ ! -d "android" ]; then
-            npx cap add android
+            npx --yes @capacitor/cli add android
           fi
 
       - name: Sync Capacitor
         run: |
-          npx cap sync android
+          npx --yes @capacitor/cli sync android
 
-      - name: Build APK
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Build Android APK
         run: |
-          chmod +x android/gradlew
           cd android
+          chmod +x gradlew
           ./gradlew assembleDebug
 
-      - name: Upload SecretNet APK
+      - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: SecretNet-APK
+          name: app-debug
           path: android/app/build/outputs/apk/debug/app-debug.apk
