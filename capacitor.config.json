@@ -1,8 +1,6 @@
 {
   "appId": "com.secretnet.app",
   "appName": "SecretNet",
-  "webDir": "www",
-  "server": {
-    "androidScheme": "https"
-  }
+  "webDir": ".",
+  "androidScheme": "https"
 }
