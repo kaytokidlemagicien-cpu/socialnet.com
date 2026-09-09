@@ -21,6 +21,7 @@ jobs:
       - name: Install dependencies
         run: |
           npm install
+          npm install @capacitor/android @capacitor/core @capacitor/cli
 
       - name: Build web assets
         run: |
@@ -31,6 +32,13 @@ jobs:
         run: |
           if [ ! -d "android" ]; then
             npx --yes @capacitor/cli add android
+          fi
+
+      - name: Configure Android Permissions (Cleartext Traffic)
+        run: |
+          MANIFEST_PATH="android/app/src/main/AndroidManifest.xml"
+          if [ -f "$MANIFEST_PATH" ]; then
+            sed -i 's/<application/<application android:usesCleartextTraffic="true"/g' "$MANIFEST_PATH"
           fi
 
       - name: Sync Capacitor
