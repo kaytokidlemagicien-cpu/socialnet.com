@@ -5,7 +5,7 @@ if (!SocialNet.requireLogin()) throw new Error("login required");
 const $ = id => document.getElementById(id);
 function msg(text, type="error") { const el=$("msg"); el.textContent=text; el.className="admin-msg "+type; }
 function avatar(url,name){ return url ? `<img src="${SocialNet.escapeAttr(url)}" alt="${SocialNet.escapeAttr(name)}">` : `<span class="admin-avatar">👤</span>`; }
-function adminHeaders(){ const p=sessionStorage.getItem("sn_admin_password")||""; return p ? {"X-Admin-Password":p} : {}; }
+function adminHeaders(){ const p=localStorage.getItem("sn_admin_password")||""; return p ? {"X-Admin-Password":p} : {}; }
 async function adminApi(url, options={}){ options.headers={...(options.headers||{}),...adminHeaders()}; return SocialNet.api(url,options); }
 
 async function load(){
@@ -22,7 +22,7 @@ async function load(){
     else if(String(e.message).includes("administrateur")||String(e.message).includes("autorisé")){ msg(e.message); setTimeout(()=>location.href="/",1800); }
   }
 }
-$("adminPasswordForm").addEventListener("submit",async ev=>{ev.preventDefault();sessionStorage.setItem("sn_admin_password",$("adminPassword").value);msg("");try{await load();if($("adminLogin").style.display!=="none")sessionStorage.removeItem("sn_admin_password")}catch(e){sessionStorage.removeItem("sn_admin_password");msg(e.message)}});
+$("adminPasswordForm").addEventListener("submit",async ev=>{ev.preventDefault();localStorage.setItem("sn_admin_password",$("adminPassword").value);msg("");try{await load();if($("adminLogin").style.display!=="none")localStorage.removeItem("sn_admin_password")}catch(e){localStorage.removeItem("sn_admin_password");msg(e.message)}});
 async function ban(id){if(!confirm("Bloquer cet utilisateur ? Il sera déconnecté."))return;try{await adminApi(`/api/admin/users/${id}/ban`,{method:"POST"});msg("Utilisateur bloqué.","success");load()}catch(e){msg(e.message)}}
 async function unban(id){try{await adminApi(`/api/admin/users/${id}/unban`,{method:"POST"});msg("Utilisateur débloqué.","success");load()}catch(e){msg(e.message)}}
 async function removeUser(id,name){if(!confirm(`Supprimer définitivement ${name} et ses données liées ?`))return;try{await adminApi(`/api/admin/users/${id}`,{method:"DELETE"});msg("Utilisateur supprimé.","success");load()}catch(e){msg(e.message)}}

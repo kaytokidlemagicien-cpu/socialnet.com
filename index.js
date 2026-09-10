@@ -64,7 +64,7 @@ async function loadCurrentUser() {
 
         if (!user) return;
 
-        sessionStorage.setItem(
+        localStorage.setItem(
             "sn_user",
             JSON.stringify(user)
         );

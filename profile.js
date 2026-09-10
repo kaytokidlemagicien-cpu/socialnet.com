@@ -11,7 +11,7 @@ async function load(){
   const d=await SocialNet.api("/api/users/"+SocialNet.user().id),u=d.user;
   document.getElementById("profileName").textContent=u.name;document.getElementById("profileId").textContent=u.id;document.getElementById("profileDate").textContent=SocialNet.date(u.created_at);
   document.getElementById("profileAvatar").outerHTML=SocialNet.avatarHTML(u.avatar_url,u.name).replace('class="avatar"','class="avatar avatar-large"');
-  sessionStorage.setItem("sn_user",JSON.stringify(u));
+  localStorage.setItem("sn_user",JSON.stringify(u));
   postsBox.innerHTML=d.posts.length?d.posts.map(postCard).join(""):'<div class="card empty">لا توجد منشورات بعد.</div>';
  }catch(e){postsBox.innerHTML='<div class="card empty">'+SocialNet.escape(e.message)+'</div>'}
 }
@@ -21,6 +21,6 @@ avatarInput.addEventListener("change",async()=>{
  if(!file.type.startsWith("image/"))return alert("Choisissez une image valide.");
  if(file.size>5*1024*1024)return alert("Taille maximale : 5 Mo.");
  const fd=new FormData();fd.append("image",file);changeAvatar.disabled=true;status.textContent="⏳ Téléversement de l’image...";
- try{const d=await SocialNet.api("/api/profile/avatar",{method:"POST",body:fd});sessionStorage.setItem("sn_user",JSON.stringify(d.user));status.textContent="✅ Photo de profil modifiée.";await load();location.reload()}catch(e){status.textContent="❌ "+e.message}finally{changeAvatar.disabled=false;avatarInput.value=""}
+ try{const d=await SocialNet.api("/api/profile/avatar",{method:"POST",body:fd});localStorage.setItem("sn_user",JSON.stringify(d.user));status.textContent="✅ Photo de profil modifiée.";await load();location.reload()}catch(e){status.textContent="❌ "+e.message}finally{changeAvatar.disabled=false;avatarInput.value=""}
 });
 document.getElementById("refreshProfile").addEventListener("click",load);load();
