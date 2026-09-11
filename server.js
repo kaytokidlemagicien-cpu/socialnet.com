@@ -110,6 +110,51 @@ const SITE_PASSWORD =
 const ADMIN_NAME = String(process.env.ADMIN_NAME || "").trim();
 const ADMIN_PASSWORD = String(process.env.ADMIN_PASSWORD || "");
 
+const RESEND_API_KEY = String(process.env.RESEND_API_KEY || "").trim();
+const RESEND_FROM = String(process.env.RESEND_FROM || "onboarding@resend.dev").trim();
+// Gratuit / mode secours : si Resend refuse l'envoi parce que le domaine n'est pas vérifié,
+// le compte peut quand même être créé. Désactivez ce mode après vérification du domaine.
+const ALLOW_UNVERIFIED_EMAIL_FALLBACK = String(process.env.ALLOW_UNVERIFIED_EMAIL_FALLBACK || "true").toLowerCase() !== "false";
+
+function normalizeEmail(value) { return String(value || "").trim().toLowerCase(); }
+function hashPassword(password) {
+    return new Promise((resolve,reject)=>{
+        const salt=crypto.randomBytes(16);
+        crypto.scrypt(String(password),salt,64,(err,derived)=>{
+            if(err) return reject(err);
+            resolve(`${salt.toString("hex")}:${derived.toString("hex")}`);
+        });
+    });
+}
+function verifyPassword(password,stored) {
+    return new Promise((resolve,reject)=>{
+        try {
+            const [saltHex,hashHex]=String(stored||"").split(":");
+            if(!saltHex||!hashHex) return resolve(false);
+            const salt=Buffer.from(saltHex,"hex"), expected=Buffer.from(hashHex,"hex");
+            crypto.scrypt(String(password),salt,expected.length,(err,derived)=>{
+                if(err) return reject(err);
+                resolve(derived.length===expected.length && crypto.timingSafeEqual(derived,expected));
+            });
+        } catch(err){ reject(err); }
+    });
+}
+async function sendVerificationEmail(email,code) {
+    if(!RESEND_API_KEY) throw new Error("Le service e-mail n’est pas configuré sur le serveur.");
+    const response=await fetch("https://api.resend.com/emails",{
+        method:"POST",
+        headers:{"Authorization":`Bearer ${RESEND_API_KEY}`,"Content-Type":"application/json"},
+        body:JSON.stringify({
+            from:RESEND_FROM,
+            to:[email],
+            subject:"Votre code de vérification SocialNet",
+            html:`<p>Votre code de vérification SocialNet est :</p><p style="font-size:28px;font-weight:700;letter-spacing:6px">${code}</p><p>Ce code expire dans 10 minutes.</p>`
+        })
+    });
+    let payload={}; try{payload=await response.json();}catch(_){}
+    if(!response.ok) throw new Error(`Échec de l’envoi de l’e-mail : ${payload?.message||payload?.error||`Resend HTTP ${response.status}`}`);
+}
+
 // Optionnel : adresse(s) IP autorisée(s) pour le panneau Admin.
 // Exemple : ADMIN_IPS=1.2.3.4,5.6.7.8
 const ADMIN_IPS = String(process.env.ADMIN_IPS || "")
@@ -455,7 +500,22 @@ async function initDb() {
 
             ALTER TABLE users
             ADD COLUMN IF NOT EXISTS is_banned BOOLEAN NOT NULL DEFAULT FALSE;
+            ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash TEXT;
+            ALTER TABLE users ADD COLUMN IF NOT EXISTS email TEXT;
+            ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verified BOOLEAN NOT NULL DEFAULT FALSE;
         `);
+
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS email_verifications (
+                id BIGSERIAL PRIMARY KEY,
+                user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                email TEXT NOT NULL,
+                code_hash TEXT NOT NULL,
+                expires_at TIMESTAMPTZ NOT NULL,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            );
+        `);
+        await pool.query(`CREATE INDEX IF NOT EXISTS idx_email_verifications_email ON email_verifications(email);`);
 
 
         /* =================================================
@@ -1050,64 +1110,6 @@ app.post("/api/admin/users/:userId/unban", requireAuth, requireAdmin, async (req
     } catch (err) { next(err); }
 });
 
-// ==========================================
-// ضع كود تسجيل الدخول الجديد هنا مباشرة:
-// ==========================================
-app.post("/api/enter", writeLimiter, async (req, res) => {
-  const { name, password } = req.body;
-
-  // 1. التحقق من كلمة السر الموحدة Boss2026
-  if (password !== SITE_PASSWORD) {
-    return res.status(401).json({ error: "Mot de passe incorrect." });
-  }
-
-  if (!name || !name.trim()) {
-    return res.status(400).json({ error: "Veuillez entrer un nom." });
-  }
-
-  const cleanName = name.trim();
-
-  try {
-    // 2. البحث عن المستخدم أو إنشاؤه في PostgreSQL
-    let result = await pool.query(
-      "SELECT id, name, avatar_url FROM users WHERE LOWER(name) = LOWER($1) LIMIT 1",
-      [cleanName]
-    );
-    let user = result.rows[0];
-
-    if (!user) {
-      const insertResult = await pool.query(
-        "INSERT INTO users (name) VALUES ($1) RETURNING id, name, avatar_url",
-        [cleanName]
-      );
-      user = insertResult.rows[0];
-    }
-
-    // 3. إنشاء الجلسة وتخزين التوكن
-    const rawToken = createToken();
-    const tokenHash = hashToken(rawToken);
-    const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30 يومًا
-
-    await pool.query(
-      "INSERT INTO sessions (token_hash, user_id, expires_at) VALUES ($1, $2, $3)",
-      [tokenHash, user.id, expiresAt]
-    );
-
-    // 4. إرجاع التوكن وبيانات المستخدم الكاملة
-    res.json({
-      token: rawToken,
-      user: {
-        id: user.id,
-        name: user.name,
-        avatar_url: user.avatar_url || ""
-      }
-    });
-  } catch (err) {
-    console.error("Erreur connexion:", err);
-    res.status(500).json({ error: "Erreur serveur lors de la connexion." });
-  }
-});
-
 app.delete("/api/admin/users/:userId", requireAuth, requireAdmin, async (req, res, next) => {
     try {
         const id = Number(req.params.userId);
@@ -1166,157 +1168,97 @@ app.get(
    تسجيل الConnexion
 ========================================================= */
 
-app.post(
-    "/api/enter",
-    authLimiter,
-    async (
-        req,
-        res,
-        next
-    ) => {
+
+// =========================================================
+// Authentification : création de compte + vérification e-mail
+// =========================================================
+
+app.post("/api/register", authLimiter, async (req, res, next) => {
+    try {
+        const name=String(req.body?.name||"").trim().replace(/\s+/g," ");
+        const password=String(req.body?.password||"");
+        const email=normalizeEmail(req.body?.email);
+        if(name.length<2||name.length>30) return res.status(400).json({error:"Le nom doit contenir entre 2 et 30 caractères."});
+        if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.status(400).json({error:"Adresse e-mail invalide."});
+        if(password.length<8) return res.status(400).json({error:"Le mot de passe doit contenir au moins 8 caractères."});
+
+        const existing=(await pool.query("SELECT id,password_hash,email,email_verified FROM users WHERE LOWER(name)=LOWER($1) LIMIT 1",[name])).rows[0];
+        if(existing?.password_hash && existing.email_verified) return res.status(409).json({error:"Ce nom de compte est déjà utilisé."});
+        if(existing?.password_hash && !existing.email_verified && normalizeEmail(existing.email)!==email)
+            return res.status(409).json({error:"Ce compte est déjà associé à une autre adresse e-mail."});
+
+        const emailOwner=await pool.query("SELECT id FROM users WHERE LOWER(email)=LOWER($1) AND id<>COALESCE($2,0) LIMIT 1",[email,existing?.id||0]);
+        if(emailOwner.rows.length) return res.status(409).json({error:"Cette adresse e-mail est déjà utilisée."});
+
+        const passwordHash=await hashPassword(password);
+        const user=existing
+            ? (await pool.query("UPDATE users SET name=$1,password_hash=$2,email=$3,email_verified=FALSE WHERE id=$4 RETURNING id,name,avatar_url,created_at",[name,passwordHash,email,existing.id])).rows[0]
+            : (await pool.query("INSERT INTO users(name,password_hash,email,email_verified) VALUES($1,$2,$3,FALSE) RETURNING id,name,avatar_url,created_at",[name,passwordHash,email])).rows[0];
+
+        const code=String(Math.floor(100000+Math.random()*900000));
+        const codeHash=crypto.createHash("sha256").update(code).digest("hex");
+        await pool.query("DELETE FROM email_verifications WHERE user_id=$1",[user.id]);
+        await pool.query("INSERT INTO email_verifications(user_id,email,code_hash,expires_at) VALUES($1,$2,$3,NOW()+INTERVAL '10 minutes')",[user.id,email,codeHash]);
 
         try {
+            await sendVerificationEmail(email,code);
+            return res.json({ok:true,requiresVerification:true,email});
+        } catch (mailErr) {
+            if (!ALLOW_UNVERIFIED_EMAIL_FALLBACK) throw mailErr;
 
-            const password =
-                String(
-                    req.body?.password ||
-                    ""
-                );
-
-
-            const name =
-                String(
-                    req.body?.name ||
-                    ""
-                )
-                    .trim()
-                    .replace(
-                        /\s+/g,
-                        " "
-                    );
-
-
-            if (
-                password !==
-                SITE_PASSWORD
-            ) {
-
-                return res
-                    .status(401)
-                    .json({
-
-                        error:
-                            "Mot de passe incorrect."
-
-                    });
-
-            }
-
-
-            if (
-                name.length < 2 ||
-                name.length > 30
-            ) {
-
-                return res
-                    .status(400)
-                    .json({
-
-                        error:
-                            "Le nom doit contenir entre 2 et 30 caractères."
-
-                    });
-
-            }
-
-
-            const userResult =
-                await pool.query(
-                    `
-                    INSERT INTO users(
-                        name
-                    )
-
-                    VALUES($1)
-
-                    ON CONFLICT(name)
-                    DO UPDATE SET
-                        name =
-                            EXCLUDED.name
-
-                    RETURNING
-                        id,
-                        name,
-                        avatar_url,
-                        created_at
-                    `,
-                    [name]
-                );
-
-
-            const user =
-                userResult.rows[0];
-
-
-            const token =
-                createToken();
-
-
-            const tokenHash =
-                hashToken(token);
-
-
-            await pool.query(
-                `
-                INSERT INTO sessions(
-                    token_hash,
-                    user_id,
-                    expires_at
-                )
-
-                VALUES(
-                    $1,
-                    $2,
-                    NOW() +
-                    INTERVAL '30 days'
-                )
-                `,
-                [
-                    tokenHash,
-                    user.id
-                ]
-            );
-
-
-            await pool.query(
-                `
-                DELETE FROM sessions
-
-                WHERE expires_at <= NOW()
-                `
-            );
-
-
-            res.json({
-
-                ok:
-                    true,
-
-                token,
-
-                user
-
-            });
-
-        } catch (err) {
-
-            next(err);
-
+            // Resend en mode test accepte seulement l'adresse du propriétaire du compte.
+            // Pour rester gratuit et éviter que l'inscription casse, on marque l'adresse
+            // comme non bloquante et connecte immédiatement le nouvel utilisateur.
+            console.warn("⚠️ E-mail de vérification non envoyé; mode secours gratuit activé:", mailErr.message);
+            await pool.query("DELETE FROM email_verifications WHERE user_id=$1",[user.id]);
+            await pool.query("UPDATE users SET email_verified=TRUE WHERE id=$1",[user.id]);
+            const rawToken=createToken();
+            await pool.query("INSERT INTO sessions(token_hash,user_id,expires_at) VALUES($1,$2,NOW()+INTERVAL '30 days')",[hashToken(rawToken),user.id]);
+            return res.json({ok:true,requiresVerification:false,email,token:rawToken,user:{id:user.id,name:user.name,avatar_url:user.avatar_url||"",created_at:user.created_at},emailVerificationSkipped:true});
         }
+    } catch(err){ next(err); }
+});
 
-    }
-);
+app.post("/api/verify-email", authLimiter, async (req,res,next)=>{
+    try{
+        const email=normalizeEmail(req.body?.email), code=String(req.body?.code||"").trim();
+        if(!email||!/^\d{6}$/.test(code)) return res.status(400).json({error:"Code de vérification invalide."});
+        const result=await pool.query(`
+            SELECT ev.user_id AS uid, ev.code_hash, u.name, u.avatar_url, u.created_at
+            FROM email_verifications ev JOIN users u ON u.id=ev.user_id
+            WHERE LOWER(ev.email)=LOWER($1) AND ev.expires_at>NOW()
+            ORDER BY ev.created_at DESC LIMIT 1
+        `,[email]);
+        if(!result.rows.length) return res.status(400).json({error:"Le code est expiré ou introuvable."});
+        const row=result.rows[0];
+        const expected=Buffer.from(crypto.createHash("sha256").update(code).digest("hex"),"hex");
+        const actual=Buffer.from(row.code_hash,"hex");
+        if(actual.length!==expected.length||!crypto.timingSafeEqual(actual,expected))
+            return res.status(401).json({error:"Code de vérification incorrect."});
+        await pool.query("UPDATE users SET email_verified=TRUE WHERE id=$1",[row.uid]);
+        await pool.query("DELETE FROM email_verifications WHERE user_id=$1",[row.uid]);
+        const rawToken=createToken();
+        await pool.query("INSERT INTO sessions(token_hash,user_id,expires_at) VALUES($1,$2,NOW()+INTERVAL '30 days')",[hashToken(rawToken),row.uid]);
+        res.json({ok:true,token:rawToken,user:{id:row.uid,name:row.name,avatar_url:row.avatar_url||"",created_at:row.created_at}});
+    }catch(err){next(err);}
+});
 
+app.post("/api/enter", authLimiter, async (req,res,next)=>{
+    try{
+        const name=String(req.body?.name||"").trim().replace(/\s+/g," ");
+        const password=String(req.body?.password||"");
+        if(name.length<2||name.length>30) return res.status(400).json({error:"Le nom doit contenir entre 2 et 30 caractères."});
+        const result=await pool.query("SELECT id,name,password_hash,email_verified,avatar_url,created_at,is_banned FROM users WHERE LOWER(name)=LOWER($1) LIMIT 1",[name]);
+        if(!result.rows.length) return res.status(401).json({error:"Compte introuvable. Utilisez « Créer un compte »."});
+        const user=result.rows[0];
+        if(user.is_banned) return res.status(403).json({error:"Ce compte est bloqué."});
+        if(!user.password_hash) return res.status(401).json({error:"Ce compte doit être configuré avec « Créer un compte » avant la première connexion."});
+        if(!(await verifyPassword(password,user.password_hash))) return res.status(401).json({error:"Nom du compte ou mot de passe incorrect."});
+        const rawToken=createToken();
+        await pool.query("INSERT INTO sessions(token_hash,user_id,expires_at) VALUES($1,$2,NOW()+INTERVAL '30 days')",[hashToken(rawToken),user.id]);
+        res.json({ok:true,token:rawToken,user:{id:user.id,name:user.name,avatar_url:user.avatar_url||"",created_at:user.created_at}});
+    }catch(err){next(err);}
+});
 
 /* =========================================================
    المستخدم الحالي
