@@ -1,0 +1,22 @@
+SocialNet — Release Signing
+
+هذا المشروع يحتوي على Release Keystore جاهز ويستعمله GitHub Actions تلقائياً.
+لا تحتاج إلى إنشاء Keystore أو إضافة GitHub Secrets.
+
+Keystore:
+signing/socialnet-release.keystore
+
+Alias:
+socialnet
+
+Keystore password:
+SNRelease-2026!Ks
+
+Key password:
+SNRelease-2026!Ks
+
+مهم جداً:
+هذا الإصدار "self-contained" لأن مفتاح التوقيع موجود داخل المشروع لكي يعمل GitHub Actions بدون Secrets.
+لا ترفع هذا المشروع إلى مستودع GitHub عام. يجب أن يكون المستودع Private، وإلا يمكن لأي شخص الحصول على مفتاح التوقيع.
+
+لا تغيّر الـKeystore أو Alias أو كلمات السر بعد نشر التطبيق. يجب الاحتفاظ بنفس Keystore لتوقيع تحديثات التطبيق مستقبلاً.
